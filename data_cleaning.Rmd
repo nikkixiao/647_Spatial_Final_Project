@@ -1,0 +1,50 @@
+---
+title: "EDA_647_Project"
+author: "Daniel Hu"
+date: "2026-10-29"
+output: pdf_document
+---
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+data <- read.csv('PLACES.csv')
+head(data)
+names(data)
+```
+
+- Filtering out unneccesary covariates, and assigning individual columns to the different measures
+
+```{r}
+data_filtered <- data %>% filter(Year==2023, DataValueTypeID == 'CrdPrv') %>%
+  select(!starts_with(c('Data_Value_Unit',
+                        'Data_Value_Type',
+                        'Data_Value_Footnote',
+                        'Data_Value_Footnote_Symbol',
+                        'DataValueTypeID'))) %>%
+  pivot_wider(names_from = "Measure", values_from = "Data_Value")
+head(data_filtered)
+summary(data_filtered)
+```
+
+- Sort by individual measure
+
+```{r}
+for (i in seq(16, 50, 1)){
+  x <- cbind(data_filtered[,1:15], data_filtered[,i])
+  x <- x %>% drop_na(names(data_filtered)[i])
+  dim(x)
+  var_name <- paste0("data_", i)
+  assign(var_name, x)
+}
+```
+
+- check for unique counties
+
+```{r}
+dim(data_17)
+length(unique(data_17$Geolocation))
+```
+
