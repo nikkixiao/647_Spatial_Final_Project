@@ -19,7 +19,7 @@ names(data)
 
 ```{r}
 data_filtered <- data %>% filter(Year==2023, DataValueTypeID == 'CrdPrv') %>%
-  select(!starts_with(c('Data_Value_Unit',
+  select(!(c('Data_Value_Unit',
                         'Data_Value_Type',
                         'Data_Value_Footnote',
                         'Data_Value_Footnote_Symbol',
@@ -32,19 +32,43 @@ summary(data_filtered)
 - Sort by individual measure
 
 ```{r}
+x <- cbind(data_filtered[,1:15], data_filtered[,17])
+x <- x %>% drop_na(names(data_filtered)[17])
+dim(x)
+var_name <- paste0("data_", 17)
+assign(var_name, 17)
+
+```
+
+```{r}
+# check for unique columns and counties 
+for (i in seq_along(x)){
+  cat(colnames(x)[i], length(unique(x[,i])), '\n')
+}
+```
+
+```{r}
+# make unique data frames and remove unneeded data columns
 for (i in seq(16, 50, 1)){
   x <- cbind(data_filtered[,1:15], data_filtered[,i])
   x <- x %>% drop_na(names(data_filtered)[i])
+  x <- x %>% select(!c('Year',
+                      'StateDesc',
+                      'DataSource',
+                      'Category',
+                      'CategoryID',
+                      'MeasureId',
+                      'Short_Question_Text'))
   dim(x)
   var_name <- paste0("data_", i)
   assign(var_name, x)
 }
 ```
 
-- check for unique counties
+Most measures cover 2957 obs, only a couple have 2300
 
 ```{r}
-dim(data_17)
-length(unique(data_17$Geolocation))
+head(data_17)
+
 ```
 
