@@ -25,19 +25,36 @@ data_filtered <- data %>% filter(Year==2023, DataValueTypeID == 'CrdPrv') %>%
                         'Data_Value_Footnote_Symbol',
                         'DataValueTypeID'))) %>%
   pivot_wider(names_from = "Measure", values_from = "Data_Value")
+
+data_filtered <- data_filtered %>% select(!c('Year',
+                    'StateDesc',
+                    'DataSource',
+                    'Category',
+                    'CategoryID',
+                    'MeasureId',
+                    'Short_Question_Text')) %>%
+  mutate(
+    loc_id = paste(StateAbbr, LocationName, LocationID, sep="-"),
+    .keep="unused",
+    .before = everything()
+  )
 head(data_filtered)
 summary(data_filtered)
+for (i in seq_along(data_filtered)){
+  cat(colnames(data_filtered)[i], length(unique(data_filtered[[i]])), '\n')
+}
+
 ```
 
 - Sort by individual measure
 
 ```{r}
-x <- cbind(data_filtered[,1:15], data_filtered[,17])
+x <- cbind(data_filtered[,1:6], data_filtered[,17])
 x <- x %>% drop_na(names(data_filtered)[17])
 dim(x)
 var_name <- paste0("data_", 17)
 assign(var_name, 17)
-
+head(x)
 ```
 
 ```{r}
@@ -49,26 +66,32 @@ for (i in seq_along(x)){
 
 ```{r}
 # make unique data frames and remove unneeded data columns
-for (i in seq(16, 50, 1)){
-  x <- cbind(data_filtered[,1:15], data_filtered[,i])
-  x <- x %>% drop_na(names(data_filtered)[i])
-  x <- x %>% select(!c('Year',
-                      'StateDesc',
-                      'DataSource',
-                      'Category',
-                      'CategoryID',
-                      'MeasureId',
-                      'Short_Question_Text'))
-  dim(x)
-  var_name <- paste0("data_", i)
-  assign(var_name, x)
-}
+# for (i in seq(16, 50, 1)){
+#   x <- cbind(data_filtered[,1:15], data_filtered[,i])
+#   x <- x %>% drop_na(names(data_filtered)[i])
+#   x <- x %>% select(!c('Year',
+#                       'StateDesc',
+#                       'DataSource',
+#                       'Category',
+#                       'CategoryID',
+#                       'MeasureId',
+#                       'Short_Question_Text')) %>%
+#     mutate(
+#       loc_id = paste(StateAbbr, LocationName, LocationID, sep="-"),
+#       .keep="unused",
+#       .before = everything()
+#     )
+#   dim(x)
+#   var_name <- paste0("data_", i)
+#   assign(var_name, x)
+# }
 ```
 
 Most measures cover 2957 obs, only a couple have 2300
 
-```{r}
-head(data_17)
 
+
+```{r}
+saveRDS(data_filtered, 'PLACES_FILTERED')
 ```
 
