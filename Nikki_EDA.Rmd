@@ -1,0 +1,198 @@
+---
+title: "Nikki_EDA_647_Project"
+author: "Nikki Xiao"
+date: "2026-11-07"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 8,
+  fig.height = 5
+)
+
+library(tidyverse)
+```
+
+## Purpose
+
+This exploratory analysis examines county-level health measures from the 2023 CDC PLACES data. The main outcome is adult obesity prevalence. The goals are to check the cleaned data, summarize the outcome, examine one possible explanatory variable, and visualize the spatial pattern. Spatial models are not fitted in this document.
+
+## Read and check the cleaned data
+
+`PLACES_FILTERED` is an RDS file created in `data_cleaning.Rmd`. Although the file has many rows, each health measure is observed on a different subset of rows. Therefore, the analysis first creates one row per county for each measure of interest.
+
+```{r read-data}
+places <- readRDS("PLACES_FILTERED")
+
+dim(places)
+length(unique(places$loc_id))
+```
+
+```{r missingness}
+measure_names <- names(places)[7:ncol(places)]
+
+measure_coverage <- data.frame(
+  measure = measure_names,
+  counties_observed = sapply(measure_names, function(x) {
+    sum(!is.na(places[[x]]))
+  })
+)
+
+measure_coverage <- measure_coverage[order(measure_coverage$counties_observed), ]
+measure_coverage
+```
+
+## Prepare variables for EDA
+
+Adult obesity prevalence is used as the response. Physical inactivity is added as one simple covariate because it is plausibly related to obesity and is easy to interpret. This is an exploratory association, not a causal analysis.
+
+```{r prepare-data}
+outcome_name <- "Obesity among adults"
+activity_name <- "No leisure-time physical activity among adults"
+
+obesity <- places %>%
+  filter(!is.na(.data[[outcome_name]])) %>%
+  transmute(
+    loc_id,
+    state = str_extract(loc_id, "^[A-Z]{2}"),
+    county_fips = str_extract(loc_id, "[0-9]+$"),
+    obesity = .data[[outcome_name]],
+    lower_ci = Low_Confidence_Limit,
+    upper_ci = High_Confidence_Limit,
+    population = parse_number(TotalPopulation),
+    adult_population = parse_number(TotalPop18plus),
+    longitude = as.numeric(str_match(Geolocation, "POINT \\(([-0-9.]+) ([-0-9.]+)\\)")[, 2]),
+    latitude = as.numeric(str_match(Geolocation, "POINT \\(([-0-9.]+) ([-0-9.]+)\\)")[, 3])
+  )
+
+inactivity <- places %>%
+  filter(!is.na(.data[[activity_name]])) %>%
+  transmute(
+    loc_id,
+    physical_inactivity = .data[[activity_name]]
+  )
+
+eda_data <- obesity %>%
+  left_join(inactivity, by = "loc_id")
+
+glimpse(eda_data)
+```
+
+```{r data-quality}
+quality_check <- data.frame(
+  item = c(
+    "Rows in analysis data",
+    "Unique county IDs",
+    "Missing obesity values",
+    "Missing physical inactivity values",
+    "Missing coordinates"
+  ),
+  value = c(
+    nrow(eda_data),
+    n_distinct(eda_data$loc_id),
+    sum(is.na(eda_data$obesity)),
+    sum(is.na(eda_data$physical_inactivity)),
+    sum(is.na(eda_data$longitude) | is.na(eda_data$latitude))
+  )
+)
+
+quality_check
+```
+
+## Distribution of adult obesity prevalence
+
+```{r outcome-summary}
+summary(eda_data$obesity)
+sd(eda_data$obesity)
+```
+
+```{r outcome-histogram}
+ggplot(eda_data, aes(x = obesity)) +
+  geom_histogram(binwidth = 1, color = "white", fill = "steelblue") +
+  geom_vline(
+    xintercept = mean(eda_data$obesity, na.rm = TRUE),
+    color = "firebrick",
+    linetype = "dashed"
+  ) +
+  labs(
+    title = "Distribution of Adult Obesity Prevalence",
+    subtitle = "Dashed line shows the county mean",
+    x = "Adult obesity prevalence (%)",
+    y = "Number of counties"
+  ) +
+  theme_minimal()
+```
+
+## Obesity and physical inactivity
+
+```{r association}
+association <- cor(
+  eda_data$obesity,
+  eda_data$physical_inactivity,
+  use = "complete.obs"
+)
+
+association
+```
+
+```{r association-plot}
+ggplot(eda_data, aes(x = physical_inactivity, y = obesity)) +
+  geom_point(alpha = 0.35, color = "navy") +
+  geom_smooth(method = "lm", se = TRUE, color = "firebrick") +
+  labs(
+    title = "Adult Obesity and Physical Inactivity",
+    subtitle = paste("Pearson correlation =", round(association, 2)),
+    x = "No leisure-time physical activity (%)",
+    y = "Adult obesity prevalence (%)"
+  ) +
+  theme_minimal()
+```
+
+The plot and correlation describe an unadjusted county-level relationship. They do not establish that physical inactivity causes obesity.
+
+## Spatial pattern
+
+The available geolocation is a county centroid rather than a county polygon. Consequently, the following is a point map. Alaska, Hawaii, and territories are included, so the map is intended as a broad check for spatial pattern rather than a finished choropleth.
+
+```{r spatial-plot}
+ggplot(eda_data, aes(x = longitude, y = latitude, color = obesity)) +
+  geom_point(size = 1.1, alpha = 0.8) +
+  coord_quickmap() +
+  scale_color_viridis_c(option = "plasma") +
+  labs(
+    title = "Spatial Distribution of Adult Obesity Prevalence",
+    x = "Longitude",
+    y = "Latitude",
+    color = "Obesity (%)"
+  ) +
+  theme_minimal()
+```
+
+## Counties with the highest and lowest prevalence
+
+```{r extreme-counties}
+lowest_counties <- eda_data %>%
+  arrange(obesity) %>%
+  select(loc_id, obesity, lower_ci, upper_ci) %>%
+  slice_head(n = 10)
+
+highest_counties <- eda_data %>%
+  arrange(desc(obesity)) %>%
+  select(loc_id, obesity, lower_ci, upper_ci) %>%
+  slice_head(n = 10)
+
+lowest_counties
+highest_counties
+```
+
+## EDA conclusions
+
+The analysis includes `r nrow(eda_data)` counties. Estimated adult obesity prevalence has a mean of `r round(mean(eda_data$obesity), 1)`%, a median of `r round(median(eda_data$obesity), 1)`%, and ranges from `r round(min(eda_data$obesity), 1)`% to `r round(max(eda_data$obesity), 1)`%. The distribution is reasonably concentrated around the upper 30s, although there is meaningful variation among counties.
+
+Obesity and physical inactivity have a positive county-level correlation of `r round(association, 2)`. Counties with greater physical inactivity therefore tend to have greater estimated obesity prevalence. This is an ecological, unadjusted relationship and should not be interpreted as causal.
+
+The point map suggests that the outcome is spatially patterned rather than randomly scattered. A later analysis could investigate this pattern formally with a spatial model. The PLACES values are estimates with confidence intervals, and counties near one another may be correlated, so both uncertainty and spatial dependence should be considered when selecting that model.
