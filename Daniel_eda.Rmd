@@ -1,0 +1,90 @@
+---
+title: "Daniel EDA"
+author: "Daniel Hu"
+date: "2026-11-17"
+output: pdf_document
+---
+
+```{r setup, message=FALSE, warning=FALSE}
+library(tidyverse)
+```
+
+```{r}
+raw <- readRDS('PLACES_FILTERED')
+```
+
+```{r}
+meas_cols <- names(raw)[7:ncol(raw)]
+data <- raw %>%
+  group_by(loc_id) %>%
+  summarise(
+    across(c(TotalPopulation, TotalPop18plus, Geolocation), first),
+    across(all_of(meas_cols), function(x) first(x[!is.na(x)])),
+    .groups = "drop"
+  ) # this just groups all the loc_ids and combines rows
+
+us <- filter(data, loc_id == "US--59") 
+# apparently there's a US avg row idfk, just set it aside for now 
+
+data <- data %>% filter(loc_id != "US--59")
+colSums(is.na(data[meas_cols]))       
+dim(data)
+table(rowSums(!is.na(data[meas_cols])))
+
+data[rowSums(!is.na(data[meas_cols])) == 0, c("loc_id")]
+
+```
+
+- compressed the dataset into one unique row per county, there is one county without any data: Loving TX. Removed the confidence interval for eda specifically
+
+```{r}
+par(mfrow = c(2, 3))
+for (i in c("Obesity among adults", "Diagnosed diabetes among adults",
+            "Current cigarette smoking among adults", "Depression among adults",
+            "High blood pressure among adults", "Any disability among adults")) {
+  hist(data[[i]], breaks = 30, col = "thistle", border = "steelblue", main = i)
+}
+par(mfrow = c(1, 1))
+
+par(mar = c(12, 4, 2, 1))
+boxplot(data[meas_cols], names = meas_cols, las = 2, cex.axis = 0.6, col = "thistle")
+par(mar = c(5, 4, 4, 2))
+```
+
+- used bar graph to plot all 35, below is code to do that but with histograms, 
+
+```{r}
+par(mfrow = c(3, 4), mar = c(4, 4, 3, 1)) 
+for (i in meas_cols){
+  hist(data[[i]], breaks = 30, col = "thistle", border = "steelblue", main = i, cex.main = 0.7)
+}
+par(mfrow = c(1, 1), mar = c(5, 4, 4, 2))     
+```
+
+- idk heres some more plots glhf
+
+```{r}
+short <- setNames(sub(" among adults.*$", "", meas_cols), meas_cols)
+cors <- cor(data[meas_cols], use = "pairwise.complete.obs")
+dimnames(cors) <- list(short[meas_cols], short[meas_cols])
+```
+
+```{r, fig.width=11, fig.height=10}
+as.data.frame(as.table(cors)) %>%
+  ggplot(aes(Var1, Var2, fill = Freq)) +
+  geom_tile() +
+  scale_fill_gradient2(low = 'red', mid = 'white', high = 'steelblue') +
+  theme_minimal(base_size = 8) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  labs(fill = "r")
+```
+
+```{r}
+as.data.frame(as.table(cors)) %>%
+  rename(m1 = Var1, m2 = Var2, r = Freq) %>%
+  filter(as.character(m1) < as.character(m2)) %>%
+  arrange(desc(abs(r))) %>%
+  head(15)
+```
+
+- top correlations ranked
